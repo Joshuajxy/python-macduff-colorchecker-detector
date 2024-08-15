@@ -130,14 +130,41 @@ def check_colorchecker(values, expected_values=expected_colors):
 
 
 def draw_colorchecker(colors, centers, image, radius):
-    for observed_color, expected_color, pt in zip(colors.reshape(-1, 3),
-                                                  expected_colors.reshape(-1, 3),
-                                                  centers.reshape(-1, 2)):
-        x, y = pt
-        cv.circle(image, (x, y), radius//2, expected_color.tolist(), -1)
-        cv.circle(image, (x, y), radius//4, observed_color.tolist(), -1)
-    return image
+    for i, (observed_color, expected_color, pt) in enumerate(zip(colors.reshape(-1, 3),
+                                                                 expected_colors.reshape(-1, 3),
+                                                                 centers.reshape(-1, 2))):
+        x, y = map(int, pt)  # Convert to integers
+        cv.circle(image, (x, y), radius // 2, expected_color.tolist(), -1)
+        cv.circle(image, (x, y), radius // 4, observed_color.tolist(), -1)
 
+        # Convert BGR to RGB for display
+        r_obs, g_obs, b_obs = observed_color[::-1]
+        r_exp, g_exp, b_exp = expected_color[::-1]
+
+        # Prepare text to display
+        observed_text = f"({r_obs:.0f},{g_obs:.0f},{b_obs:.0f})"
+        expected_text = f"({r_exp:.0f},{g_exp:.0f},{b_exp:.0f})"
+
+        # Calculate text positions
+        text_size = cv.getTextSize(observed_text, cv.FONT_HERSHEY_SIMPLEX, 0.4, 1)[0]
+        obs_text_x = x - text_size[0] // 2
+        obs_text_y = y + radius // 2 + text_size[1] + 5
+        exp_text_x = x - text_size[0] // 2
+        exp_text_y = y - 5 - radius // 4 # Position just below the small circle
+
+        # Choose text color based on background brightness
+        obs_brightness = (r_obs * 299 + g_obs * 587 + b_obs * 114) / 1000
+        exp_brightness = (r_exp * 299 + g_exp * 587 + b_exp * 114) / 1000
+        obs_text_color = (255, 0, 0)#(0, 0, 0) if obs_brightness > 128 else (255, 255, 255)
+        exp_text_color = (0, 255, 0)#(0, 0, 0) if exp_brightness > 128 else (255, 255, 255)
+
+        # Draw text
+        cv.putText(image, observed_text, (obs_text_x, obs_text_y), cv.FONT_HERSHEY_SIMPLEX, 0.4, obs_text_color, 1,
+                   cv.LINE_AA)
+        cv.putText(image, expected_text, (exp_text_x, exp_text_y), cv.FONT_HERSHEY_SIMPLEX, 0.4, exp_text_color, 1,
+                   cv.LINE_AA)
+
+    return image
 
 class ColorChecker:
     def __init__(self, error, values, points, size):
@@ -509,15 +536,20 @@ def find_macbeth(img, patch_size=None, is_passport=False, debug=DEBUG,
 
 
 def write_results(colorchecker, filename=None):
-    mes = ',r,g,b\n'
-    for k, (b, g, r) in enumerate(colorchecker.values.reshape(1, 3)):
-        mes += '{},{},{},{}\n'.format(k, r, g, b)
+    mes = 'patch,r,g,b\n'
+    for k, (b, g, r) in enumerate(colorchecker.values.reshape(-1, 3)):
+        mes += f'{k+1},{r:.0f},{g:.0f},{b:.0f}\n'
 
     if filename is None:
         print(mes)
     else:
-        with open(filename, 'w+') as f:
+        with open(filename, 'w') as f:
             f.write(mes)
+        print(f"Results written to {filename}")
+
+    # Debug output
+    print(f"Number of patches: {colorchecker.values.shape[0]}")
+    print(f"First few color values:\n{colorchecker.values[:5]}")
 
 
 if __name__ == '__main__':
@@ -530,4 +562,4 @@ if __name__ == '__main__':
     else:
         print('Usage: %s <input_image> <output_image> <(optional) patch_size>\n'
               '' % argv[0], file=stderr)
-    # write_results(colorchecker, 'results.csv')
+    write_results(colorchecker, 'results.csv')
